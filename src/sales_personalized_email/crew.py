@@ -264,45 +264,126 @@ class SalesPersonalizedEmailCrew:
         prospect_name = prospect_name_default
         prospect_email = prospect_email_default
         
-        # FIRST APPROACH: Try to get data from environment variables (highest priority)
+        # FIRST APPROACH: Try to get data from task context or request payload
         try:
-            import os
-            import json
+            # Check if there's a 'task' attribute with run context
+            if hasattr(output, 'task') and hasattr(output.task, 'inputs'):
+                task_inputs = output.task.inputs
+                logger.info(f"CALLBACK: Found task.inputs: {task_inputs}")
+                if isinstance(task_inputs, dict):
+                    if 'name' in task_inputs and task_inputs['name']:
+                        prospect_name = task_inputs['name']
+                        logger.info(f"CALLBACK: Found name in task inputs: '{prospect_name}'")
+                    if 'email_address' in task_inputs and task_inputs['email_address']:
+                        prospect_email = task_inputs['email_address']
+                        logger.info(f"CALLBACK: Found email_address in task inputs: '{prospect_email}'")
+                    elif 'email' in task_inputs and task_inputs['email']:
+                        prospect_email = task_inputs['email']
+                        logger.info(f"CALLBACK: Found email in task inputs: '{prospect_email}'")
             
-            # First try the new direct JSON input variable
-            agent_inputs_json = os.environ.get('AGENT_RUN_INPUTS_JSON', '')
-            if agent_inputs_json:
-                logger.info(f"CALLBACK: Found AGENT_RUN_INPUTS_JSON environment variable")
-                try:
-                    input_data = json.loads(agent_inputs_json)
-                    # For direct input format
-                    if isinstance(input_data, dict) and 'inputs' in input_data and isinstance(input_data['inputs'], dict):
-                        inputs = input_data['inputs']
-                        logger.info(f"CALLBACK: Successfully parsed direct inputs: {json.dumps(inputs)[:200]}...")
-                    # For top-level format
-                    else:
-                        inputs = input_data
-                        logger.info(f"CALLBACK: Using top-level inputs: {json.dumps(inputs)[:200]}...")
-                    
-                    # Extract name
-                    if 'name' in inputs and inputs['name']:
-                        prospect_name = inputs['name']
-                        logger.info(f"CALLBACK: Found name in environment JSON: '{prospect_name}'")
-                    
-                    # Extract email
-                    if 'email_address' in inputs and inputs['email_address']:
-                        prospect_email = inputs['email_address']
-                        logger.info(f"CALLBACK: Found email_address in environment JSON: '{prospect_email}'")
-                    elif 'email' in inputs and inputs['email']:
-                        prospect_email = inputs['email']
-                        logger.info(f"CALLBACK: Found email in environment JSON: '{prospect_email}'")
-                except json.JSONDecodeError as e:
-                    logger.error(f"CALLBACK: Error parsing AGENT_RUN_INPUTS_JSON: {e}")
+            # Try to access the run inputs through any available mechanism
+            import inspect
+            current_frame = inspect.currentframe()
+            for frame_info in inspect.getouterframes(current_frame):
+                frame = frame_info.frame
+                if 'inputs' in frame.f_locals and isinstance(frame.f_locals['inputs'], dict):
+                    run_inputs = frame.f_locals['inputs']
+                    logger.info(f"CALLBACK: Found run inputs in stack frame: {run_inputs}")
+                    if 'name' in run_inputs and run_inputs['name'] and prospect_name == prospect_name_default:
+                        prospect_name = run_inputs['name']
+                        logger.info(f"CALLBACK: Found name in run inputs: '{prospect_name}'")
+                    if 'email_address' in run_inputs and run_inputs['email_address'] and prospect_email == prospect_email_default:
+                        prospect_email = run_inputs['email_address']
+                        logger.info(f"CALLBACK: Found email_address in run inputs: '{prospect_email}'")
+                    elif 'email' in run_inputs and run_inputs['email'] and prospect_email == prospect_email_default:
+                        prospect_email = run_inputs['email']
+                        logger.info(f"CALLBACK: Found email in run inputs: '{prospect_email}'")
+                elif 'run_inputs' in frame.f_locals and isinstance(frame.f_locals['run_inputs'], dict):
+                    run_inputs = frame.f_locals['run_inputs']
+                    logger.info(f"CALLBACK: Found run_inputs in stack frame: {run_inputs}")
+                    if 'name' in run_inputs and run_inputs['name'] and prospect_name == prospect_name_default:
+                        prospect_name = run_inputs['name']
+                        logger.info(f"CALLBACK: Found name in run_inputs: '{prospect_name}'")
+                    if 'email_address' in run_inputs and run_inputs['email_address'] and prospect_email == prospect_email_default:
+                        prospect_email = run_inputs['email_address']
+                        logger.info(f"CALLBACK: Found email_address in run_inputs: '{prospect_email}'")
+                    elif 'email' in run_inputs and run_inputs['email'] and prospect_email == prospect_email_default:
+                        prospect_email = run_inputs['email']
+                        logger.info(f"CALLBACK: Found email in run_inputs: '{prospect_email}'")
+                
+                # Also look for run_id to possibly fetch inputs
+                if 'run_id' in frame.f_locals and prospect_email == prospect_email_default:
+                    run_id = frame.f_locals['run_id']
+                    logger.info(f"CALLBACK: Found run_id in stack frame: {run_id}")
+                    try:
+                        import os
+                        import requests
+                        api_url = f"http://localhost:8000/runs/{run_id}"
+                        headers = {"Authorization": f"Bearer {os.environ.get('AGENT_API_TOKEN', '')}"}
+                        response = requests.get(api_url, headers=headers, timeout=5)
+                        if response.status_code == 200:
+                            run_data = response.json()
+                            if 'inputs' in run_data and isinstance(run_data['inputs'], dict):
+                                api_inputs = run_data['inputs']
+                                logger.info(f"CALLBACK: Retrieved run inputs from API: {api_inputs}")
+                                
+                                # Extract email and name if available
+                                if 'name' in api_inputs and api_inputs['name'] and prospect_name == prospect_name_default:
+                                    prospect_name = api_inputs['name']
+                                    logger.info(f"CALLBACK: Found name from API: '{prospect_name}'")
+                                if 'email_address' in api_inputs and api_inputs['email_address'] and prospect_email == prospect_email_default:
+                                    prospect_email = api_inputs['email_address']
+                                    logger.info(f"CALLBACK: Found email_address from API: '{prospect_email}'")
+                                elif 'email' in api_inputs and api_inputs['email'] and prospect_email == prospect_email_default:
+                                    prospect_email = api_inputs['email']
+                                    logger.info(f"CALLBACK: Found email from API: '{prospect_email}'")
+                    except Exception as e:
+                        logger.error(f"CALLBACK: Error fetching inputs from API: {e}")
         except Exception as e:
-            logger.error(f"CALLBACK: Error accessing environment variables: {e}")
+            logger.error(f"CALLBACK: Error accessing task/run context: {e}")
             logger.error(traceback.format_exc())
         
-        # SECOND APPROACH: Try CrewAI instance inputs if available
+        # SECOND APPROACH: Try environment variables
+        if (prospect_name == prospect_name_default or prospect_email == prospect_email_default):
+            try:
+                import os
+                import json
+                
+                # Try the direct JSON input variable
+                agent_inputs_json = os.environ.get('AGENT_RUN_INPUTS_JSON', '')
+                if agent_inputs_json:
+                    logger.info(f"CALLBACK: Found AGENT_RUN_INPUTS_JSON environment variable")
+                    try:
+                        input_data = json.loads(agent_inputs_json)
+                        # For direct input format
+                        if isinstance(input_data, dict) and 'inputs' in input_data and isinstance(input_data['inputs'], dict):
+                            inputs = input_data['inputs']
+                            logger.info(f"CALLBACK: Successfully parsed direct inputs: {json.dumps(inputs)[:200]}...")
+                        # For top-level format
+                        else:
+                            inputs = input_data
+                            logger.info(f"CALLBACK: Using top-level inputs: {json.dumps(inputs)[:200]}...")
+                        
+                        # Extract name
+                        if prospect_name == prospect_name_default and 'name' in inputs and inputs['name']:
+                            prospect_name = inputs['name']
+                            logger.info(f"CALLBACK: Found name in environment JSON: '{prospect_name}'")
+                        
+                        # Extract email
+                        if prospect_email == prospect_email_default:
+                            if 'email_address' in inputs and inputs['email_address']:
+                                prospect_email = inputs['email_address']
+                                logger.info(f"CALLBACK: Found email_address in environment JSON: '{prospect_email}'")
+                            elif 'email' in inputs and inputs['email']:
+                                prospect_email = inputs['email']
+                                logger.info(f"CALLBACK: Found email in environment JSON: '{prospect_email}'")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"CALLBACK: Error parsing AGENT_RUN_INPUTS_JSON: {e}")
+            except Exception as e:
+                logger.error(f"CALLBACK: Error accessing environment variables: {e}")
+                logger.error(traceback.format_exc())
+        
+        # THIRD APPROACH: Try CrewAI instance inputs
         if (prospect_name == prospect_name_default or prospect_email == prospect_email_default) and self._crew_instance_inputs and isinstance(self._crew_instance_inputs, dict):
             logger.debug(f"CALLBACK_DEBUG: self._crew_instance_inputs is a TRUTHY dictionary.")
             # Get name from the inputs
@@ -319,7 +400,7 @@ class SalesPersonalizedEmailCrew:
                     prospect_email = self._crew_instance_inputs["email"]
                     logger.info(f"CALLBACK: Found email in inputs: '{prospect_email}'")
         
-        # THIRD APPROACH: Try to extract from email body
+        # FOURTH APPROACH: Extract from email output
         if prospect_name == prospect_name_default or prospect_email == prospect_email_default:
             logger.info("CALLBACK: Attempting to extract information from email body")
             try:
