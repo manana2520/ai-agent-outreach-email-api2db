@@ -3,6 +3,7 @@ import sys
 import requests
 import json
 import logging
+import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -33,6 +34,11 @@ def run(inputs_override: Optional[dict] = None):
     If inputs_override is provided, it will be used instead of the hardcoded defaults.
     This allows the agentic runtime (or other callers) to pass in dynamic inputs.
     """
+    print("=======================================")
+    print("RUN FUNCTION CALLED")
+    print(f"Received inputs_override: {inputs_override}")
+    print("=======================================")
+    
     logger.info("Starting run function")
     if inputs_override:
         logger.info(f"Using provided inputs: {inputs_override}")
@@ -187,11 +193,22 @@ def run(inputs_override: Optional[dict] = None):
         logger.info(f"Prepared API payload: name={payload['data']['name']}, email={payload['data']['email']}, " + 
                    f"subject='{payload['data']['subject']}', date={payload['data']['date']}, " +
                    f"message length: {len(payload['data']['message'])}")
+        
+        print("=======================================")
+        print("ABOUT TO MAKE API CALL")
+        print(f"Endpoint: {api_url}")
+        print(f"Payload: name={payload['data']['name']}, email={payload['data']['email']}")
+        print(f"subject='{payload['data']['subject']}'")
+        print(f"date={payload['data']['date']}")
+        print(f"message length: {len(payload['data']['message'])}")
+        print("=======================================")
 
         try:
             logger.info(f"Sending API request to {api_url}")
-            response = requests.post(api_url, headers=headers, json=payload)
+            print(f"ATTEMPTING API REQUEST to {api_url}")
+            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
             logger.info(f"API response status code: {response.status_code}")
+            print(f"API RESPONSE STATUS: {response.status_code}")
             
             response.raise_for_status()
             logger.info(f"Successfully sent email data to API. Status: {response.status_code}")
@@ -199,17 +216,32 @@ def run(inputs_override: Optional[dict] = None):
             logger.info(f"Response from API: {response.text}")
             print(f"Response from API: {response.text}")
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"Connection error sending email data to API: {e}")
-            print(f"Connection error sending email data to API: {e}")
+            error_msg = f"CONNECTION ERROR sending email data to API: {e}"
+            logger.error(error_msg)
+            print(error_msg)
+            print("STACK TRACE:")
+            traceback.print_exc()
         except requests.exceptions.Timeout as e:
-            logger.error(f"Timeout error sending email data to API: {e}")
-            print(f"Timeout error sending email data to API: {e}")
+            error_msg = f"TIMEOUT ERROR sending email data to API: {e}"
+            logger.error(error_msg)
+            print(error_msg)
+            print("STACK TRACE:")
+            traceback.print_exc()
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error sending email data to API: {e}")
-            print(f"Error sending email data to API: {e}")
+            error_msg = f"REQUEST EXCEPTION sending email data to API: {e}"
+            logger.error(error_msg)
+            print(error_msg)
+            print("STACK TRACE:")
+            traceback.print_exc()
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"API Response content: {e.response.text}")
                 print(f"API Response content: {e.response.text}")
+        except Exception as e:
+            error_msg = f"UNEXPECTED ERROR during API call: {e}"
+            logger.error(error_msg)
+            print(error_msg)
+            print("STACK TRACE:")
+            traceback.print_exc()
     else:
         logger.warning("Crew execution did not return a result. API call skipped.")
         print("Crew execution did not return a result. API call skipped.")
@@ -254,3 +286,49 @@ def test():
 
     except Exception as e:
         raise Exception(f"An error occurred while replaying the crew: {e}")
+
+
+def test_api():
+    """
+    Test function to directly try the API call.
+    """
+    print("=======================================")
+    print("RUNNING TEST_API FUNCTION")
+    print("=======================================")
+
+    api_url = "https://mycomputer.maziak.eu/api/v1/import/store-emails"
+    headers = {
+        "CF-Access-Client-Id": "3894d1511738c7ab1d79f04866bce72e.access",
+        "CF-Access-Client-Secret": "d9cc6e4001d53f87f7dcdf3777e330d2781a9b866ef55ff222241b829166c510",
+        "Content-Type": "application/json",
+        "X-API-Token": "33f311ec174ef02f7c7ae27cd4cc52e3",
+    }
+    payload = {
+        "data": {
+            "name": "API Test Function",
+            "email": "api.test@example.com",
+            "subject": "Test Subject from API Test Function",
+            "message": "This is a test message from the test_api function.",
+            "date": datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+        }
+    }
+    
+    print(f"Sending test request to {api_url}")
+    try:
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        print(f"Response status code: {response.status_code}")
+        print(f"Response content: {response.text}")
+        return True
+    except Exception as e:
+        print(f"Error during test API call: {e}")
+        traceback.print_exc()
+        return False
+
+# Call test_api when the module is loaded to test connectivity immediately
+try:
+    print("Executing test_api function on module load")
+    test_api_result = test_api()
+    print(f"Test API result: {'Success' if test_api_result else 'Failed'}")
+except Exception as e:
+    print(f"Exception when calling test_api: {e}")
+    traceback.print_exc()
