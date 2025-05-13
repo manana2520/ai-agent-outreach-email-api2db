@@ -14,8 +14,16 @@ from crewai.project import CrewBase, agent, crew, task
 # For simplicity, let's try to use a basic configured logger here if needed.
 # However, ideally the main module logger should be passed or imported if possible.
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 if not logger.hasHandlers():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # More explicit basic handler setup for this specific logger if needed:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = False # Prevent duplicate messages if root logger is also configured by main.py
 
 class PersonalizedEmail(BaseModel):
     subject_line: str
@@ -211,9 +219,6 @@ class SalesPersonalizedEmailCrew:
             agent=self.content_personalizer(),
         )
 
-    # Store the current inputs for use in the callback
-    _current_inputs = {}
-
     @task
     def write_email_task(self) -> Task:
         """Define the email writing task"""
@@ -237,7 +242,7 @@ class SalesPersonalizedEmailCrew:
 
     def store_email_callback(self, output):
         """Callback to send email to API after task completion"""
-        logger.info(f"CALLBACK: Executing store_email_callback")
+        logger.warning(f"CALLBACK_ENTRY: store_email_callback INVOKED. Output type: {type(output)}")
         logger.info(f"CALLBACK: Received output (type: {type(output)}): {str(output)[:200]}...")
         logger.debug(f"CALLBACK_DEBUG: Type of self._crew_instance_inputs: {type(self._crew_instance_inputs)}")
         logger.debug(f"CALLBACK_DEBUG: Value of self._crew_instance_inputs: {self._crew_instance_inputs}")
