@@ -73,66 +73,22 @@ def run(inputs_override: Optional[dict] = None):
     print(f"Crew execution result (type: {type(crew_result)}):\n{crew_result}")
     
     # Now that we have the result, send it to the API
+    # Send the personalized email to the API - SINGLE API CALL
+    logger.info(f"Sending email to API for {inputs.get(\"name\")} at {inputs.get(\"email_address\")}")
+    print(f"Sending email to API for {inputs.get(\"name\")} at {inputs.get(\"email_address\")}")
+    
     api_result = send_email_to_api(
         email_data=crew_result,
         prospect_name=inputs.get("name", "Unknown Prospect"),
         prospect_email=inputs.get("email_address", "no-email@example.com")
     )
     
+    logger.info(f"API call result: {api_result}")
     print(f"API call result: {api_result}")
     
-    # Now that we have the result, also send it to the API
-    # This is a backup in case the callback in the crew isn't executed
-    # (which can happen in some deployment environments)
-    print("Executing API call from main.py (backup)")
-    api_result = send_email_to_api(
-        email_data=crew_result,
-        prospect_name=inputs.get("name", "Unknown Prospect"),
-        prospect_email=inputs.get("email_address", "no-email@example.com")
-    )
-    
-    print(f"API call result: {api_result}")
-
-    # Check if we need to send the result to the API
-    # This only happens if we have an API token and URL and the flag indicating the callback executed is not set
-    api_token = os.environ.get("EMAIL_API_TOKEN")
-    api_url = os.environ.get("EMAIL_API_URL")
-    
-    # If environment variables are set, assume the callback has already executed and sent the email
-    # Otherwise, send it from here as a fallback
-    if not (api_token and api_url):
-        print("Executing API call from main.py (primary - environment vars not found)")
-        api_result = send_email_to_api(
-            email_data=crew_result,
-            prospect_name=inputs.get("name", "Unknown Prospect"),
-            prospect_email=inputs.get("email_address", "no-email@example.com")
-        )
-        print(f"API call result: {api_result}")
-    else:
-        print("API environment variables found - assuming callback has already sent the email or will do so")
-        
     print("=======================================")
     
     return crew_result
-
-
-def train():
-    """
-    Train the crew for a given number of iterations.
-    """
-    inputs = {"topic": "AI LLMs"}
-    try:
-        SalesPersonalizedEmailCrew().crew().train(
-            n_iterations=int(sys.argv[1]), filename=sys.argv[2], inputs=inputs
-        )
-
-    except Exception as e:
-        raise Exception(f"An error occurred while training the crew: {e}")
-
-
-def replay():
-    """
-    Replay the crew execution from a specific task.
     """
     try:
         SalesPersonalizedEmailCrew().crew().replay(task_id=sys.argv[1])

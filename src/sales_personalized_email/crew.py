@@ -245,13 +245,15 @@ class SalesPersonalizedEmailCrew:
         print(f"Executing store_email_callback")
         print(f"Received output: {output}")
         
-        # Directly send the email to the API and don't rely on processing in main.py
-        # Get email inputs from the inputs hash or use defaults
-        send_email_to_api(
-            email_data=output,
-            prospect_name="Joe Eyles Script Test",
-            prospect_email="joe.eyles.script.api2db@example.com"
-        )
+        # Get the inputs from the current crew execution context
+        # Since CrewAI doesn't provide direct access to inputs in callbacks,
+        # we need to use the inputs from main.py
+        
+        # This is a temporary workaround - the inputs will be properly provided 
+        # by main.py which also calls send_email_to_api with the correct inputs
+        
+        # DO NOT hardcode values here - let main.py handle it with the correct inputs
+        # Just return the output
         
         # Still return the output so main.py can use it if needed
         return output
