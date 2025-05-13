@@ -2,11 +2,16 @@
 import sys
 import requests
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 from sales_personalized_email.crew import SalesPersonalizedEmailCrew, PersonalizedEmail
 from crewai.crews.crew_output import CrewOutput
+
+# Configure basic logging
+# This will make log messages go to stderr by default, which is usually captured by K8s
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - AGENT_SCRIPT - %(levelname)s - %(message)s')
 
 # This main file is intended to be a way for your to run your
 # crew locally, so refrain from adding necessary logic into this file.
@@ -21,10 +26,10 @@ def run(inputs_override: Optional[dict] = None):
     This allows the agentic runtime (or other callers) to pass in dynamic inputs.
     """
     if inputs_override:
-        print(f"Using provided inputs: {inputs_override}")
+        logging.info(f"Using provided inputs: {inputs_override}")
         inputs = inputs_override
     else:
-        print("No inputs_override provided, using default inputs for local run.")
+        logging.info("No inputs_override provided, using default inputs for local run.")
         inputs = {
             "name": "Joe Eyles",
             "title": "Vice Principal",
@@ -39,39 +44,39 @@ def run(inputs_override: Optional[dict] = None):
     # This is more of a safeguard if the default inputs somehow miss it or inputs_override doesn't include it
     # but the API call part of this script expects it.
     if "email_address" not in inputs:
-        print("Warning: 'email_address' not found in inputs. Adding a placeholder for the store-emails API call.")
+        logging.warning("'email_address' not found in inputs. Adding a placeholder for the store-emails API call.")
         inputs["email_address"] = "placeholder@example.com"
 
     crew_result = SalesPersonalizedEmailCrew().crew().kickoff(inputs=inputs)
 
     if crew_result:
-        print(f"Crew execution result (type: {type(crew_result)}):\n{crew_result}")
+        logging.info(f"Crew execution result (type: {type(crew_result)}):\n{crew_result}")
 
         email_subject = "Default Subject"
         email_body = ""
 
         if isinstance(crew_result, PersonalizedEmail):
-            print("Interpreting crew_result as PersonalizedEmail Pydantic model.")
+            logging.info("Interpreting crew_result as PersonalizedEmail Pydantic model.")
             email_subject = crew_result.subject_line
             email_body = crew_result.email_body
         elif isinstance(crew_result, CrewOutput):
-            print("Interpreting crew_result as CrewOutput object.")
+            logging.info("Interpreting crew_result as CrewOutput object.")
             if hasattr(crew_result, 'subject_line') and hasattr(crew_result, 'email_body'):
-                print("CrewOutput has subject_line and email_body attributes directly.")
+                logging.info("CrewOutput has subject_line and email_body attributes directly.")
                 email_subject = crew_result.subject_line
                 email_body = crew_result.email_body
             elif crew_result.tasks_output and isinstance(crew_result.tasks_output[-1].expected_output, PersonalizedEmail):
-                print("Accessing PersonalizedEmail model from CrewOutput.tasks_output[-1].expected_output")
+                logging.info("Accessing PersonalizedEmail model from CrewOutput.tasks_output[-1].expected_output")
                 exported_model = crew_result.tasks_output[-1].expected_output
                 email_subject = exported_model.subject_line
                 email_body = exported_model.email_body
             elif crew_result.tasks_output and isinstance(crew_result.tasks_output[-1].expected_output, dict):
-                print("Accessing dict from CrewOutput.tasks_output[-1].expected_output")
+                logging.info("Accessing dict from CrewOutput.tasks_output[-1].expected_output")
                 data_dict = crew_result.tasks_output[-1].expected_output
                 email_subject = data_dict.get("subject_line", "Default Subject")
                 email_body = data_dict.get("email_body", "")
             else:
-                print("CrewOutput did not have direct attributes or expected tasks_output structure. Trying to_dict() or raw.")
+                logging.info("CrewOutput did not have direct attributes or expected tasks_output structure. Trying to_dict() or raw.")
                 try_dict = None
                 if hasattr(crew_result, "to_dict") and callable(crew_result.to_dict):
                     try_dict = crew_result.to_dict()
@@ -83,37 +88,37 @@ def run(inputs_override: Optional[dict] = None):
                     try:
                         try_dict = json.loads(crew_result.raw)
                     except json.JSONDecodeError:
-                        print(f"Error: CrewOutput.raw string could not be parsed as JSON. String was: {crew_result.raw}")
+                        logging.error(f"CrewOutput.raw string could not be parsed as JSON. String was: {crew_result.raw}")
                 elif hasattr(crew_result, "json_output") and isinstance(crew_result.json_output, str):
                      try:
                         try_dict = json.loads(crew_result.json_output)
                      except json.JSONDecodeError:
-                        print(f"Error: CrewOutput.json_output string could not be parsed as JSON. String was: {crew_result.json_output}")
+                        logging.error(f"CrewOutput.json_output string could not be parsed as JSON. String was: {crew_result.json_output}")
 
                 if isinstance(try_dict, dict):
                     email_subject = try_dict.get("subject_line", "Default Subject")
                     email_body = try_dict.get("email_body", "")
                 else:
-                    print(f"Could not extract subject/body from CrewOutput using common methods. Defaults will be used.")
+                    logging.warning(f"Could not extract subject/body from CrewOutput using common methods. Defaults will be used.")
         elif isinstance(crew_result, str):
-            print("Interpreting crew_result as a string, attempting JSON parse.")
+            logging.info("Interpreting crew_result as a string, attempting JSON parse.")
             try:
                 data_dict = json.loads(crew_result)
                 email_subject = data_dict.get("subject_line", "Default Subject")
                 email_body = data_dict.get("email_body", "")
             except json.JSONDecodeError:
-                print(f"Error: Crew result string could not be parsed as JSON.\nString was: {crew_result}")
+                logging.error(f"Crew result string could not be parsed as JSON.\nString was: {crew_result}")
         elif isinstance(crew_result, dict):
-            print("Interpreting crew_result as a dictionary.")
+            logging.info("Interpreting crew_result as a dictionary.")
             email_subject = crew_result.get("subject_line", "Default Subject")
             email_body = crew_result.get("email_body", "")
         else:
-            print(f"Warning: Crew result is of an unexpected type ({type(crew_result)}). Attempting original getattr logic.")
+            logging.warning(f"Crew result is of an unexpected type ({type(crew_result)}). Attempting original getattr logic.")
             try:
                 email_subject = getattr(crew_result, "subject_line", "Default Subject")
                 email_body = getattr(crew_result, "email_body", "")
             except AttributeError:
-                print(f"AttributeError when trying getattr on type {type(crew_result)}. Defaults will be used.")
+                logging.error(f"AttributeError when trying getattr on type {type(crew_result)}. Defaults will be used.")
 
         api_url = "https://mycomputer.maziak.eu/api/v1/import/store-emails"
         headers = {
@@ -132,20 +137,20 @@ def run(inputs_override: Optional[dict] = None):
             }
         }
 
-        print(f"Attempting to send the following payload to {api_url}:")
-        print(json.dumps(payload, indent=2))
+        logging.info(f"Attempting to send the following payload to {api_url}:")
+        logging.info(json.dumps(payload, indent=2))
 
         try:
             response = requests.post(api_url, headers=headers, json=payload)
             response.raise_for_status()
-            print(f"Successfully sent email data to API. Status: {response.status_code}")
-            print(f"Response from API: {response.text}")
+            logging.info(f"Successfully sent email data to API. Status: {response.status_code}")
+            logging.info(f"Response from API: {response.text}")
         except requests.exceptions.RequestException as e:
-            print(f"Error sending email data to API: {e}")
+            logging.error(f"Error sending email data to API: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                print(f"API Response content: {e.response.text}")
+                logging.error(f"API Response content: {e.response.text}")
     else:
-        print("Crew execution did not return a result. API call skipped.")
+        logging.info("Crew execution did not return a result. API call skipped.")
 
 
 def train():
