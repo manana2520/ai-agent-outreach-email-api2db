@@ -240,6 +240,19 @@ class SalesPersonalizedEmailCrew:
             # process=Process.hierarchical, # In case you wanna use that instead https://docs.crewai.com/how-to/Hierarchical/
         )
 
+    def kickoff(self, inputs: dict | None = None):
+        """
+        Kicks off the crew execution with the provided inputs.
+        Stores the inputs for use in callbacks.
+        """
+        effective_inputs = inputs if inputs is not None else {}
+        logger.info(f"SalesPersonalizedEmailCrew.kickoff called. Storing inputs (type: {type(effective_inputs)}): {effective_inputs}")
+        self._crew_instance_inputs = effective_inputs
+
+        # Now, get the actual CrewAI crew and kick it off
+        crew_ai_crew_instance = self.crew() # This calls the @crew decorated method
+        return crew_ai_crew_instance.kickoff(inputs=effective_inputs)
+
     def store_email_callback(self, output):
         """Callback to send email to API after task completion"""
         logger.warning(f"CALLBACK_ENTRY: store_email_callback INVOKED. Output type: {type(output)}")
@@ -255,21 +268,22 @@ class SalesPersonalizedEmailCrew:
         
         if self._crew_instance_inputs and isinstance(self._crew_instance_inputs, dict):
             logger.debug(f"CALLBACK_DEBUG: self._crew_instance_inputs is a TRUTHY dictionary.")
-            retrieved_name = self._crew_instance_inputs.get("name")
-            retrieved_email = self._crew_instance_inputs.get("email_address")
-            
-            logger.debug(f"CALLBACK_DEBUG: Retrieved name from dict: {retrieved_name} (type: {type(retrieved_name)})")
-            logger.debug(f"CALLBACK_DEBUG: Retrieved email from dict: {retrieved_email} (type: {type(retrieved_email)})")
-            
-            if retrieved_name:
-                prospect_name = retrieved_name
+            # Get name from the inputs - could be 'name', 'prospect_name', etc.
+            if "name" in self._crew_instance_inputs and self._crew_instance_inputs["name"]:
+                prospect_name = self._crew_instance_inputs["name"]
+                logger.info(f"CALLBACK: Found name: '{prospect_name}'")
             else:
-                logger.warning(f"CALLBACK_DEBUG: 'name' key not found or None in _crew_instance_inputs. Using default: {prospect_name_default}")
-
-            if retrieved_email:
-                prospect_email = retrieved_email
+                logger.warning(f"CALLBACK: 'name' key not found or empty in inputs, using default: '{prospect_name_default}'")
+            
+            # Get email from inputs - could be 'email_address', 'email', etc.
+            if "email_address" in self._crew_instance_inputs and self._crew_instance_inputs["email_address"]:
+                prospect_email = self._crew_instance_inputs["email_address"]
+                logger.info(f"CALLBACK: Found email_address: '{prospect_email}'")
+            elif "email" in self._crew_instance_inputs and self._crew_instance_inputs["email"]:
+                prospect_email = self._crew_instance_inputs["email"]
+                logger.info(f"CALLBACK: Found email: '{prospect_email}'")
             else:
-                logger.warning(f"CALLBACK_DEBUG: 'email_address' key not found or None in _crew_instance_inputs. Using default: {prospect_email_default}")
+                logger.warning(f"CALLBACK: No valid email found in inputs, using default: '{prospect_email_default}'")
             
             logger.info(f"CALLBACK: Using inputs from _crew_instance_inputs: Name='{prospect_name}', Email='{prospect_email}'")
         else:
