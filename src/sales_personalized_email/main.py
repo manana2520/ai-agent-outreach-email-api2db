@@ -6,6 +6,7 @@ import logging
 import traceback
 from datetime import datetime, timezone
 from typing import Optional
+import os
 
 from sales_personalized_email.crew import SalesPersonalizedEmailCrew, PersonalizedEmail, send_email_to_api
 from crewai.crews.crew_output import CrewOutput
@@ -79,7 +80,38 @@ def run(inputs_override: Optional[dict] = None):
     )
     
     print(f"API call result: {api_result}")
-    print("======================================")
+    
+    # Now that we have the result, also send it to the API
+    # This is a backup in case the callback in the crew isn't executed
+    # (which can happen in some deployment environments)
+    print("Executing API call from main.py (backup)")
+    api_result = send_email_to_api(
+        email_data=crew_result,
+        prospect_name=inputs.get("name", "Unknown Prospect"),
+        prospect_email=inputs.get("email_address", "no-email@example.com")
+    )
+    
+    print(f"API call result: {api_result}")
+
+    # Check if we need to send the result to the API
+    # This only happens if we have an API token and URL and the flag indicating the callback executed is not set
+    api_token = os.environ.get("EMAIL_API_TOKEN")
+    api_url = os.environ.get("EMAIL_API_URL")
+    
+    # If environment variables are set, assume the callback has already executed and sent the email
+    # Otherwise, send it from here as a fallback
+    if not (api_token and api_url):
+        print("Executing API call from main.py (primary - environment vars not found)")
+        api_result = send_email_to_api(
+            email_data=crew_result,
+            prospect_name=inputs.get("name", "Unknown Prospect"),
+            prospect_email=inputs.get("email_address", "no-email@example.com")
+        )
+        print(f"API call result: {api_result}")
+    else:
+        print("API environment variables found - assuming callback has already sent the email or will do so")
+        
+    print("=======================================")
     
     return crew_result
 

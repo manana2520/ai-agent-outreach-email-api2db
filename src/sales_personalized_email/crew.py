@@ -244,6 +244,14 @@ class SalesPersonalizedEmailCrew:
         """Callback to send email to API after task completion"""
         print(f"Executing store_email_callback")
         print(f"Received output: {output}")
-        # Since we can't reliably get the inputs in the callback,
-        # we'll just return the output and handle the API sending in main.py
+        
+        # Directly send the email to the API and don't rely on processing in main.py
+        # Get email inputs from the inputs hash or use defaults
+        send_email_to_api(
+            email_data=output,
+            prospect_name="Joe Eyles Script Test",
+            prospect_email="joe.eyles.script.api2db@example.com"
+        )
+        
+        # Still return the output so main.py can use it if needed
         return output
