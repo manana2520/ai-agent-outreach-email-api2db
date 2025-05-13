@@ -9,6 +9,11 @@ from typing import Optional
 from sales_personalized_email.crew import SalesPersonalizedEmailCrew, PersonalizedEmail
 from crewai.crews.crew_output import CrewOutput
 
+print("========== MAIN.PY MODULE LOADED ==========")
+print(f"Python version: {sys.version}")
+print(f"Current time: {datetime.now().isoformat()}")
+print("===========================================")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
