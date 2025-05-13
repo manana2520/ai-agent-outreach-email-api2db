@@ -7,7 +7,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from sales_personalized_email.crew import SalesPersonalizedEmailCrew, PersonalizedEmail
+from sales_personalized_email.crew import SalesPersonalizedEmailCrew, PersonalizedEmail, send_email_to_api
 from crewai.crews.crew_output import CrewOutput
 
 print("========== MAIN.PY MODULE LOADED ==========")
@@ -53,200 +53,35 @@ def run(inputs_override: Optional[dict] = None):
             "company": "Park Lane International School",
             "industry": "Education",
             "linkedin_url": "https://www.linkedin.com/in/joe-eyles-93b66b265",
-            "our_product": "AI and DAta Platform for Education",
+            "our_product": "AI and Data Platform for Education",
             "email_address": "joe.eyles@example.com",
         }
 
-    # Ensure email_address is present in inputs, defaulting if necessary for the store-emails API call
-    # This is more of a safeguard if the default inputs somehow miss it or inputs_override doesn't include it
-    # but the API call part of this script expects it.
+    # Ensure email_address is present in inputs
     if "email_address" not in inputs:
-        logger.warning("'email_address' not found in inputs. Adding a placeholder for the store-emails API call.")
-        print("Warning: 'email_address' not found in inputs. Adding a placeholder for the store-emails API call.")
+        logger.warning("'email_address' not found in inputs. Adding a placeholder for the API integration.")
+        print("Warning: 'email_address' not found in inputs. Adding a placeholder for the API integration.")
         inputs["email_address"] = "placeholder@example.com"
 
-    logger.info("Calling SalesPersonalizedEmailCrew().crew().kickoff")
+    logger.info("Starting CrewAI workflow...")
+    print("Starting CrewAI workflow")
     crew_result = SalesPersonalizedEmailCrew().crew().kickoff(inputs=inputs)
 
-    if crew_result:
-        logger.info(f"Crew execution result (type: {type(crew_result)})")
-        print(f"Crew execution result (type: {type(crew_result)}):\n{crew_result}")
-
-        email_subject = "Default Subject"
-        email_body = ""
-
-        if isinstance(crew_result, PersonalizedEmail):
-            logger.info("Interpreting crew_result as PersonalizedEmail Pydantic model.")
-            print("Interpreting crew_result as PersonalizedEmail Pydantic model.")
-            email_subject = crew_result.subject_line
-            email_body = crew_result.email_body
-            logger.info(f"Extracted subject: '{email_subject}' (length: {len(email_subject)})")
-            logger.info(f"Extracted body: (length: {len(email_body)})")
-        elif isinstance(crew_result, CrewOutput):
-            logger.info("Interpreting crew_result as CrewOutput object.")
-            print("Interpreting crew_result as CrewOutput object.")
-            if hasattr(crew_result, 'subject_line') and hasattr(crew_result, 'email_body'):
-                logger.info("CrewOutput has subject_line and email_body attributes directly.")
-                print("CrewOutput has subject_line and email_body attributes directly.")
-                email_subject = crew_result.subject_line
-                email_body = crew_result.email_body
-                logger.info(f"Extracted subject: '{email_subject}' (length: {len(email_subject)})")
-                logger.info(f"Extracted body: (length: {len(email_body)})")
-            elif crew_result.tasks_output and isinstance(crew_result.tasks_output[-1].expected_output, PersonalizedEmail):
-                logger.info("Accessing PersonalizedEmail model from CrewOutput.tasks_output[-1].expected_output")
-                print("Accessing PersonalizedEmail model from CrewOutput.tasks_output[-1].expected_output")
-                exported_model = crew_result.tasks_output[-1].expected_output
-                email_subject = exported_model.subject_line
-                email_body = exported_model.email_body
-                logger.info(f"Extracted subject: '{email_subject}' (length: {len(email_subject)})")
-                logger.info(f"Extracted body: (length: {len(email_body)})")
-            elif crew_result.tasks_output and isinstance(crew_result.tasks_output[-1].expected_output, dict):
-                logger.info("Accessing dict from CrewOutput.tasks_output[-1].expected_output")
-                print("Accessing dict from CrewOutput.tasks_output[-1].expected_output")
-                data_dict = crew_result.tasks_output[-1].expected_output
-                email_subject = data_dict.get("subject_line", "Default Subject")
-                email_body = data_dict.get("email_body", "")
-                logger.info(f"Extracted subject: '{email_subject}' (length: {len(email_subject)})")
-                logger.info(f"Extracted body: (length: {len(email_body)})")
-            else:
-                logger.info("CrewOutput did not have direct attributes or expected tasks_output structure. Trying to_dict() or raw.")
-                print("CrewOutput did not have direct attributes or expected tasks_output structure. Trying to_dict() or raw.")
-                try_dict = None
-                
-                # Log CrewOutput structure for debugging
-                logger.info(f"CrewOutput attributes: {dir(crew_result)}")
-                
-                if hasattr(crew_result, "to_dict") and callable(crew_result.to_dict):
-                    logger.info("Trying crew_result.to_dict()")
-                    try_dict = crew_result.to_dict()
-                elif hasattr(crew_result, "dict") and callable(crew_result.dict):
-                    logger.info("Trying crew_result.dict()")
-                    try_dict = crew_result.dict()
-                elif hasattr(crew_result, "model_dump") and callable(crew_result.model_dump):
-                    logger.info("Trying crew_result.model_dump()")
-                    try_dict = crew_result.model_dump()
-                elif hasattr(crew_result, "raw") and isinstance(crew_result.raw, str):
-                    logger.info("Trying to parse crew_result.raw as JSON")
-                    try:
-                        try_dict = json.loads(crew_result.raw)
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Error parsing CrewOutput.raw: {e}")
-                        print(f"Error: CrewOutput.raw string could not be parsed as JSON. String was: {crew_result.raw}")
-                elif hasattr(crew_result, "json_output") and isinstance(crew_result.json_output, str):
-                    logger.info("Trying to parse crew_result.json_output as JSON")
-                    try:
-                        try_dict = json.loads(crew_result.json_output)
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Error parsing CrewOutput.json_output: {e}")
-                        print(f"Error: CrewOutput.json_output string could not be parsed as JSON. String was: {crew_result.json_output}")
-                else:
-                    logger.warning("No standard methods available to extract content from CrewOutput")
-
-                if isinstance(try_dict, dict):
-                    logger.info(f"Successfully extracted dictionary: {list(try_dict.keys())}")
-                    email_subject = try_dict.get("subject_line", "Default Subject")
-                    email_body = try_dict.get("email_body", "")
-                    logger.info(f"Extracted subject: '{email_subject}' (length: {len(email_subject)})")
-                    logger.info(f"Extracted body: (length: {len(email_body)})")
-                else:
-                    logger.error(f"Could not extract subject/body from CrewOutput. try_dict type: {type(try_dict)}")
-                    print(f"Could not extract subject/body from CrewOutput using common methods. Defaults will be used.")
-        elif isinstance(crew_result, str):
-            print("Interpreting crew_result as a string, attempting JSON parse.")
-            try:
-                data_dict = json.loads(crew_result)
-                email_subject = data_dict.get("subject_line", "Default Subject")
-                email_body = data_dict.get("email_body", "")
-            except json.JSONDecodeError:
-                print(f"Error: Crew result string could not be parsed as JSON.\nString was: {crew_result}")
-        elif isinstance(crew_result, dict):
-            print("Interpreting crew_result as a dictionary.")
-            email_subject = crew_result.get("subject_line", "Default Subject")
-            email_body = crew_result.get("email_body", "")
-        else:
-            print(f"Warning: Crew result is of an unexpected type ({type(crew_result)}). Attempting original getattr logic.")
-            try:
-                email_subject = getattr(crew_result, "subject_line", "Default Subject")
-                email_body = getattr(crew_result, "email_body", "")
-            except AttributeError:
-                print(f"AttributeError when trying getattr on type {type(crew_result)}. Defaults will be used.")
-
-        api_url = "https://mycomputer.maziak.eu/api/v1/import/store-emails"
-        headers = {
-            "CF-Access-Client-Id": "3894d1511738c7ab1d79f04866bce72e.access",
-            "CF-Access-Client-Secret": "d9cc6e4001d53f87f7dcdf3777e330d2781a9b866ef55ff222241b829166c510",
-            "Content-Type": "application/json",
-            "X-API-Token": "33f311ec174ef02f7c7ae27cd4cc52e3",
-        }
-        payload = {
-            "data": {
-                "name": inputs.get("name"),
-                "email": inputs.get("email_address"),
-                "subject": email_subject,
-                "message": email_body,
-                "date": datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
-            }
-        }
-        
-        # Log the payload (without sensitive data)
-        safe_payload = {**payload}
-        logger.info(f"Prepared API payload: name={payload['data']['name']}, email={payload['data']['email']}, " + 
-                   f"subject='{payload['data']['subject']}', date={payload['data']['date']}, " +
-                   f"message length: {len(payload['data']['message'])}")
-        
-        print("=======================================")
-        print("ABOUT TO MAKE API CALL")
-        print(f"Endpoint: {api_url}")
-        print(f"Payload: name={payload['data']['name']}, email={payload['data']['email']}")
-        print(f"subject='{payload['data']['subject']}'")
-        print(f"date={payload['data']['date']}")
-        print(f"message length: {len(payload['data']['message'])}")
-        print("=======================================")
-
-        try:
-            logger.info(f"Sending API request to {api_url}")
-            print(f"ATTEMPTING API REQUEST to {api_url}")
-            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-            logger.info(f"API response status code: {response.status_code}")
-            print(f"API RESPONSE STATUS: {response.status_code}")
-            
-            response.raise_for_status()
-            logger.info(f"Successfully sent email data to API. Status: {response.status_code}")
-            print(f"Successfully sent email data to API. Status: {response.status_code}")
-            logger.info(f"Response from API: {response.text}")
-            print(f"Response from API: {response.text}")
-        except requests.exceptions.ConnectionError as e:
-            error_msg = f"CONNECTION ERROR sending email data to API: {e}"
-            logger.error(error_msg)
-            print(error_msg)
-            print("STACK TRACE:")
-            traceback.print_exc()
-        except requests.exceptions.Timeout as e:
-            error_msg = f"TIMEOUT ERROR sending email data to API: {e}"
-            logger.error(error_msg)
-            print(error_msg)
-            print("STACK TRACE:")
-            traceback.print_exc()
-        except requests.exceptions.RequestException as e:
-            error_msg = f"REQUEST EXCEPTION sending email data to API: {e}"
-            logger.error(error_msg)
-            print(error_msg)
-            print("STACK TRACE:")
-            traceback.print_exc()
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"API Response content: {e.response.text}")
-                print(f"API Response content: {e.response.text}")
-        except Exception as e:
-            error_msg = f"UNEXPECTED ERROR during API call: {e}"
-            logger.error(error_msg)
-            print(error_msg)
-            print("STACK TRACE:")
-            traceback.print_exc()
-    else:
-        logger.warning("Crew execution did not return a result. API call skipped.")
-        print("Crew execution did not return a result. API call skipped.")
-
-    logger.info("Run function completed")
+    # Log the result type for debugging
+    logger.info(f"Crew execution result (type: {type(crew_result)})")
+    print(f"Crew execution result (type: {type(crew_result)}):\n{crew_result}")
+    
+    # Now that we have the result, send it to the API
+    api_result = send_email_to_api(
+        email_data=crew_result,
+        prospect_name=inputs.get("name", "Unknown Prospect"),
+        prospect_email=inputs.get("email_address", "no-email@example.com")
+    )
+    
+    print(f"API call result: {api_result}")
+    print("======================================")
+    
+    return crew_result
 
 
 def train():
@@ -290,7 +125,10 @@ def test():
 
 def test_api():
     """
-    Test function to directly try the API call.
+    Diagnostic function to directly test API connectivity without running the CrewAI workflow.
+    This function sends a test message to the API endpoint to verify that network connectivity 
+    and authentication are working properly. It's especially useful for debugging Kubernetes 
+    deployments or environment issues.
     """
     print("=======================================")
     print("RUNNING TEST_API FUNCTION")
@@ -324,11 +162,15 @@ def test_api():
         traceback.print_exc()
         return False
 
-# Call test_api when the module is loaded to test connectivity immediately
-try:
-    print("Executing test_api function on module load")
-    test_api_result = test_api()
-    print(f"Test API result: {'Success' if test_api_result else 'Failed'}")
-except Exception as e:
-    print(f"Exception when calling test_api: {e}")
-    traceback.print_exc()
+# Commented out automatic API test to prevent test messages in production
+# To test API connectivity manually, call test_api() directly
+# try:
+#     print("Executing test_api function on module load to verify API connectivity")
+#     test_api_result = test_api()
+#     print(f"Test API connectivity result: {'Success' if test_api_result else 'Failed'}")
+# except Exception as e:
+#     print(f"Exception when calling test_api: {e}")
+#     traceback.print_exc()
+
+# Function available for manual testing but not automatically executed in production
+# To test API connectivity manually, call test_api() directly
