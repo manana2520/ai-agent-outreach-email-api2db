@@ -9,13 +9,13 @@ set -o pipefail
 
 # --- Configuration ---
 NAMESPACE="ai-platform"
-AGENT_NAME="sales-personalized-email-agent"
+AGENT_NAME="sales-personalized-email-agent-api2db"
 PLATFORM_API_SERVICE="ai-agent-platform-management-api"
 AGENT_SERVICE="$AGENT_NAME" # Assuming service name matches agent name
 PLATFORM_PORT=8000
 AGENT_PORT=8082
-YAML_PATH="/tmp/sales-agent-runtime.yaml"
-GITHUB_URL="https://github.com/manana2520/ai-agent-outreach-email"
+YAML_PATH="/tmp/sales-agent-runtime-api2db.yaml"
+GITHUB_URL="https://github.com/manana2520/ai-agent-outreach-email-api2db"
 GITHUB_BRANCH="main"
 AGENT_ENTRYPOINT="src/sales_personalized_email/main.py"
 # Using environment variable from .env file
@@ -25,12 +25,13 @@ AGENT_INPUT_JSON=$(cat <<EOF
 {
   "crew": "sales_personalized_email",
   "inputs": {
-    "name": "Joe Eyles",
-    "title": "Vice Principal",
-    "company": "Park Lane International School",
-    "industry": "Education",
-    "linkedin_url": "https://www.linkedin.com/in/joe-eyles-93b66b265",
-    "our_product": "AI and DAta Platform for Education"
+    "name": "Joe Eyles Script Test",
+    "title": "VP of Testing",
+    "company": "Scripted Solutions Inc.",
+    "industry": "Automation",
+    "linkedin_url": "https://www.linkedin.com/in/joe-eyles-script",
+    "our_product": "Automated AI Data Platforms",
+    "email_address": "joe.eyles.script.api2db@example.com"
   }
 }
 EOF
@@ -304,8 +305,8 @@ while true; do
 done
 
 # Add a delay to allow the service to be created/registered AND the app inside the pod to start listening
-log "Agent pod is running. Waiting 30s for service and internal app to stabilize..."
-sleep 30
+log "Agent pod is running. Waiting 60s for service and internal app to stabilize..."
+sleep 60
 
 # 7. Check for and Kill Existing Process on Agent Port, then Start Agent Port Forward
 log "Checking if agent port $AGENT_PORT is already in use..."

@@ -14,9 +14,9 @@ else
 fi
 
 # --- Configuration (edit as needed) ---
-AGENT_NAME="sales-personalized-email-agent"
-AGENT_DESCRIPTION="MSales agent creating content of personalized email"
-GITHUB_URL="https://github.com/manana2520/ai-agent-outreach-email"
+AGENT_NAME="sales-personalized-email-agent-api2db"
+AGENT_DESCRIPTION="Sales agent creating personalized emails and writing to API2DB"
+GITHUB_URL="https://github.com/manana2520/ai-agent-outreach-email-api2db"
 GITHUB_BRANCH="main"
 AGENT_ENTRYPOINT="src/sales_personalized_email/main.py"
 NAMESPACE="aap-keboola" # Change if your namespace is different
