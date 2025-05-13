@@ -286,6 +286,37 @@ class SalesPersonalizedEmailCrew:
         else:
             logger.warning(f"CALLBACK_DEBUG: self._crew_instance_inputs is FALSY or not a dict. Attempting to extract info from output.")
             
+            # Try to access environment variables or runtime inputs
+            try:
+                # Try to access inputs from the OS environment (for K8s deployment)
+                import os
+                run_input_env = os.environ.get('AGENT_RUN_INPUTS', '')
+                if run_input_env:
+                    logger.info(f"CALLBACK: Found AGENT_RUN_INPUTS environment variable")
+                    import json
+                    try:
+                        run_inputs = json.loads(run_input_env)
+                        if isinstance(run_inputs, dict) and 'inputs' in run_inputs and isinstance(run_inputs['inputs'], dict):
+                            input_data = run_inputs['inputs']
+                            logger.info(f"CALLBACK: Successfully parsed run inputs: {json.dumps(input_data)[:200]}...")
+                            
+                            # Try to get name and email from parsed inputs
+                            if 'name' in input_data and input_data['name']:
+                                prospect_name = input_data['name']
+                                logger.info(f"CALLBACK: Found name in environment inputs: '{prospect_name}'")
+                            
+                            if 'email_address' in input_data and input_data['email_address']:
+                                prospect_email = input_data['email_address']
+                                logger.info(f"CALLBACK: Found email_address in environment inputs: '{prospect_email}'")
+                            elif 'email' in input_data and input_data['email']:
+                                prospect_email = input_data['email']
+                                logger.info(f"CALLBACK: Found email in environment inputs: '{prospect_email}'")
+                    except json.JSONDecodeError:
+                        logger.warning(f"CALLBACK: Could not parse AGENT_RUN_INPUTS as JSON: {run_input_env[:50]}...")
+            except Exception as e:
+                logger.error(f"CALLBACK: Error attempting to access runtime inputs: {e}")
+                logger.error(traceback.format_exc())
+            
             # Second approach: Try to extract from email output
             try:
                 # Get the actual content from output
@@ -321,9 +352,62 @@ class SalesPersonalizedEmailCrew:
                             if title and company:
                                 prospect_name = f"{title} at {company}"
                                 logger.info(f"CALLBACK: Created name from title/company: '{prospect_name}'")
+                    
+                    # Try to extract email if still using default
+                    if prospect_email == prospect_email_default:
+                        # Look for common email references in the body
+                        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', email_body)
+                        if email_match:
+                            extracted_email = email_match.group(0)
+                            if '@' in extracted_email and '.' in extracted_email and len(extracted_email) > 5:
+                                prospect_email = extracted_email
+                                logger.info(f"CALLBACK: Extracted email from body: '{prospect_email}'")
             except Exception as e:
                 logger.error(f"CALLBACK: Error attempting to extract name/email from output: {e}")
                 traceback.print_exc()
+        
+        # Final attempt - try to reconstruct from job title/company if available
+        if prospect_email == prospect_email_default:
+            # Access run object to get inputs as a last fallback
+            try:
+                import sys, inspect
+                current_frame = inspect.currentframe()
+                # Look in frames for run_id
+                for frame_info in inspect.getouterframes(current_frame):
+                    frame = frame_info.frame
+                    if 'run_id' in frame.f_locals:
+                        run_id = frame.f_locals['run_id']
+                        logger.info(f"CALLBACK: Found run_id: {run_id} in frame")
+                        
+                        # Look for API call to get inputs
+                        try:
+                            import requests
+                            # This assumes we're running in the K8s environment with the platform API available
+                            api_url = f"http://localhost:8000/runs/{run_id}"
+                            headers = {"Authorization": f"Bearer {os.environ.get('AGENT_API_TOKEN', '')}"}
+                            response = requests.get(api_url, headers=headers, timeout=5)
+                            if response.status_code == 200:
+                                run_data = response.json()
+                                if 'inputs' in run_data and isinstance(run_data['inputs'], dict):
+                                    input_data = run_data['inputs']
+                                    logger.info(f"CALLBACK: Retrieved run inputs from API: {input_data}")
+                                    
+                                    # Extract email and name if available
+                                    if 'email_address' in input_data and input_data['email_address']:
+                                        prospect_email = input_data['email_address']
+                                        logger.info(f"CALLBACK: Found email_address from API: '{prospect_email}'")
+                                    elif 'email' in input_data and input_data['email']:
+                                        prospect_email = input_data['email']
+                                        logger.info(f"CALLBACK: Found email from API: '{prospect_email}'")
+                                        
+                                    if prospect_name == prospect_name_default and 'name' in input_data and input_data['name']:
+                                        prospect_name = input_data['name']
+                                        logger.info(f"CALLBACK: Found name from API: '{prospect_name}'")
+                        except Exception as e:
+                            logger.error(f"CALLBACK: Error retrieving run data from API: {e}")
+                        break
+            except Exception as e:
+                logger.error(f"CALLBACK: Error accessing frame data: {e}")
         
         logger.info(f"CALLBACK: Using final values: Name='{prospect_name}', Email='{prospect_email}'")
 
