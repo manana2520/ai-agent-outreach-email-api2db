@@ -46,57 +46,44 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
     
     # Extract data from the email_data object
     try:
-        # Check if it's a CrewOutput object from CrewAI
-        if hasattr(email_data, 'items') and callable(getattr(email_data, 'items', None)):
-            # CrewOutput behaves like a dictionary
-            subject = email_data.get('subject_line', "Default Subject")
-            body = email_data.get('email_body', str(email_data))
-        # Handle regular objects
-        elif hasattr(email_data, "subject_line"):
-            subject = email_data.subject_line
-            body = email_data.email_body if hasattr(email_data, "email_body") else str(email_data)
+        actual_email_content = None
+        if hasattr(email_data, 'raw_output') and email_data.raw_output:
+            print("Processing TaskOutput/CrewOutput via raw_output")
+            # Try to parse raw_output if it's a JSON string
+            try:
+                actual_email_content = json.loads(email_data.raw_output)
+            except json.JSONDecodeError:
+                print(f"raw_output is not a valid JSON string: {email_data.raw_output[:100]}...")
+                # Fallback if raw_output is not JSON but a plain string (should not happen with Pydantic model output)
+                actual_email_content = {"subject_line": "Default Subject (raw_output non-json)", "email_body": str(email_data.raw_output)}
+        elif isinstance(email_data, dict):
+            print("Processing TaskOutput/CrewOutput as dict")
+            actual_email_content = email_data
+        elif hasattr(email_data, 'subject_line') and hasattr(email_data, 'email_body'): # Direct Pydantic model
+             print("Processing TaskOutput/CrewOutput as Pydantic model attribute access")
+             actual_email_content = {
+                 "subject_line": email_data.subject_line,
+                 "email_body": email_data.email_body
+             }
         else:
-            print("Processing as unknown object type:", type(email_data))
-            # Try to see if there's subject_line and email_body in string representation
-            email_str = str(email_data)
-            if "subject_line" in email_str and "email_body" in email_str:
-                print("Found subject_line and email_body in string representation, extracting")
-                # Extract subject
-                subject_match = re.search(r"'subject_line':\s*'([^']*)'", email_str)
-                if subject_match:
-                    subject = subject_match.group(1)
-                else:
-                    subject = "Default Subject"
-                
-                # Extract email body (more complex as it can contain quotes and newlines)
-                body_start = email_str.find("'email_body': ")
-                if body_start != -1:
-                    # Move past the 'email_body': part
-                    body_start += len("'email_body': ")
-                    
-                    # Handle email body properly
-                    if email_str[body_start:].startswith('"'):
-                        # Double-quoted string
-                        body_end = email_str.find('",', body_start)
-                        if body_end == -1:
-                            body_end = email_str.find('"}', body_start)
-                        body = email_str[body_start+1:body_end] if body_end != -1 else email_str[body_start+1:]
-                    else:
-                        # Assume it's a single-quoted string
-                        body_end = email_str.find("',", body_start)
-                        if body_end == -1:
-                            body_end = email_str.find("'}", body_start)
-                        body = email_str[body_start+1:body_end] if body_end != -1 else email_str[body_start+1:]
-                else:
-                    body = email_str  # Just use the whole string if parsing fails
-            else:
-                subject = "Default Subject"
-                body = email_str
+            # Fallback for unexpected types or string representations
+            print(f"Fallback: email_data is of type {type(email_data)}. Attempting string parsing.")
+            email_str = str(email_data) 
+            subject_match = re.search(r"['\"]subject_line['\"]:\s*['\"](.*?)['\"]", email_str)
+            body_match = re.search(r"['\"]email_body['\"]:\s*['\"](.*?)['\"]", email_str, re.DOTALL)
+            subject = subject_match.group(1) if subject_match else "Default Subject (str parse fallback)"
+            body = body_match.group(1) if body_match else email_str
+            actual_email_content = {"subject_line": subject, "email_body": body}
+
+        subject = actual_email_content.get('subject_line', "Default Subject (content parse error)")
+        body = actual_email_content.get('email_body', str(actual_email_content)) # Use str as last resort
             
-        print(f"Extracted subject: '{subject[:30]}...' and body (length: {len(body)})")
+        print(f"Extracted subject: '{subject[:50]}...' and body (length: {len(body)})")
     except Exception as e:
         print(f"Error extracting fields from email_data: {e}")
-        subject = "Default Subject (extraction error)"
+        import traceback
+        traceback.print_exc()
+        subject = "Default Subject (extraction exception)"
         body = str(email_data)
         
     # Prepare API call
@@ -174,6 +161,7 @@ class SalesPersonalizedEmailCrew:
 
     agents_config = "config/agents.yaml"
     tasks_config = "config/tasks.yaml"
+    _crew_instance_inputs: dict = None # To store inputs for the callback
 
     @agent
     def prospect_researcher(self) -> Agent:
@@ -245,15 +233,23 @@ class SalesPersonalizedEmailCrew:
         print(f"Executing store_email_callback")
         print(f"Received output: {output}")
         
-        # Get the inputs from the current crew execution context
-        # Since CrewAI doesn't provide direct access to inputs in callbacks,
-        # we need to use the inputs from main.py
+        prospect_name = "Unknown Prospect via Callback"
+        prospect_email = "unknown_callback@example.com"
         
-        # This is a temporary workaround - the inputs will be properly provided 
-        # by main.py which also calls send_email_to_api with the correct inputs
-        
-        # DO NOT hardcode values here - let main.py handle it with the correct inputs
-        # Just return the output
+        if self._crew_instance_inputs:
+            prospect_name = self._crew_instance_inputs.get("name", prospect_name)
+            prospect_email = self._crew_instance_inputs.get("email_address", prospect_email)
+            print(f"Using inputs from _crew_instance_inputs: Name='{prospect_name}', Email='{prospect_email}'")
+        else:
+            print("Warning: _crew_instance_inputs not found in callback. Using default name/email.")
+
+        # Directly send the email to the API and don't rely on processing in main.py
+        # Get email inputs from the inputs hash or use defaults
+        send_email_to_api(
+            email_data=output,
+            prospect_name=prospect_name,
+            prospect_email=prospect_email
+        )
         
         # Still return the output so main.py can use it if needed
         return output

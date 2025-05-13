@@ -49,13 +49,13 @@ def run(inputs_override: Optional[dict] = None):
         logger.info("No inputs_override provided, using default inputs for local run.")
         print("No inputs_override provided, using default inputs for local run.")
         inputs = {
-            "name": "Joe Eyles",
-            "title": "Vice Principal",
-            "company": "Park Lane International School",
-            "industry": "Education",
-            "linkedin_url": "https://www.linkedin.com/in/joe-eyles-93b66b265",
-            "our_product": "AI and Data Platform for Education",
-            "email_address": "joe.eyles@example.com",
+            "name": "Dr. Eleanor Vance",
+            "title": "Chief Innovation Officer",
+            "company": "Innovatech Solutions Ltd.",
+            "industry": "Biotechnology Research",
+            "linkedin_url": "https://www.linkedin.com/in/dreleanorvance-innovatech",
+            "our_product": "SynergyAI Data Analytics Suite",
+            "email_address": "eleanor.vance.test@example.com",
         }
 
     # Ensure email_address is present in inputs
@@ -66,29 +66,36 @@ def run(inputs_override: Optional[dict] = None):
 
     logger.info("Starting CrewAI workflow...")
     print("Starting CrewAI workflow")
-    crew_result = SalesPersonalizedEmailCrew().crew().kickoff(inputs=inputs)
+    crew_manager = SalesPersonalizedEmailCrew()
+    crew_manager._crew_instance_inputs = inputs # Store inputs on the crew manager instance
+    actual_crew_to_run = crew_manager.crew()
+    crew_result = actual_crew_to_run.kickoff(inputs=inputs)
 
-    # Log the result type for debugging
     logger.info(f"Crew execution result (type: {type(crew_result)})")
     print(f"Crew execution result (type: {type(crew_result)}):\n{crew_result}")
-    
-    # Now that we have the result, send it to the API
-    # Send the personalized email to the API - SINGLE API CALL
-    logger.info(f"Sending email to API for {inputs.get(\"name\")} at {inputs.get(\"email_address\")}")
-    print(f"Sending email to API for {inputs.get(\"name\")} at {inputs.get(\"email_address\")}")
-    
-    api_result = send_email_to_api(
-        email_data=crew_result,
-        prospect_name=inputs.get("name", "Unknown Prospect"),
-        prospect_email=inputs.get("email_address", "no-email@example.com")
-    )
-    
-    logger.info(f"API call result: {api_result}")
-    print(f"API call result: {api_result}")
     
     print("=======================================")
     
     return crew_result
+
+
+def train():
+    """
+    Train the crew for a given number of iterations.
+    """
+    inputs = {"topic": "AI LLMs"}
+    try:
+        SalesPersonalizedEmailCrew().crew().train(
+            n_iterations=int(sys.argv[1]), filename=sys.argv[2], inputs=inputs
+        )
+
+    except Exception as e:
+        raise Exception(f"An error occurred while training the crew: {e}")
+
+
+def replay():
+    """
+    Replay the crew execution from a specific task.
     """
     try:
         SalesPersonalizedEmailCrew().crew().replay(task_id=sys.argv[1])
