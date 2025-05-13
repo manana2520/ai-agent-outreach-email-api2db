@@ -6,6 +6,7 @@ import json
 import os
 import re
 import logging
+import traceback
 
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
@@ -96,7 +97,6 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         logger.info(f"Extracted subject: '{subject[:50]}...' and body (length: {len(body)})")
     except Exception as e:
         logger.error(f"Error extracting fields from email_data: {e}")
-        import traceback
         traceback.print_exc()
         subject = "Default Subject (extraction exception)"
         body = str(email_data)
@@ -161,7 +161,6 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
     except Exception as e:
         error_message = f"Unexpected error sending to API: {str(e)}"
         logger.error(error_message)
-        import traceback
         traceback.print_exc()
         return {
             "status_code": 500,
@@ -257,38 +256,76 @@ class SalesPersonalizedEmailCrew:
         """Callback to send email to API after task completion"""
         logger.warning(f"CALLBACK_ENTRY: store_email_callback INVOKED. Output type: {type(output)}")
         logger.info(f"CALLBACK: Received output (type: {type(output)}): {str(output)[:200]}...")
-        logger.debug(f"CALLBACK_DEBUG: Type of self._crew_instance_inputs: {type(self._crew_instance_inputs)}")
-        logger.debug(f"CALLBACK_DEBUG: Value of self._crew_instance_inputs: {self._crew_instance_inputs}")
-
+        
+        # Default fallback values
         prospect_name_default = "Unknown Prospect via Callback"
         prospect_email_default = "unknown_callback@example.com"
         
         prospect_name = prospect_name_default
         prospect_email = prospect_email_default
         
+        # First approach: Get data from _crew_instance_inputs if available
         if self._crew_instance_inputs and isinstance(self._crew_instance_inputs, dict):
             logger.debug(f"CALLBACK_DEBUG: self._crew_instance_inputs is a TRUTHY dictionary.")
-            # Get name from the inputs - could be 'name', 'prospect_name', etc.
+            # Get name from the inputs
             if "name" in self._crew_instance_inputs and self._crew_instance_inputs["name"]:
                 prospect_name = self._crew_instance_inputs["name"]
-                logger.info(f"CALLBACK: Found name: '{prospect_name}'")
+                logger.info(f"CALLBACK: Found name in inputs: '{prospect_name}'")
             else:
-                logger.warning(f"CALLBACK: 'name' key not found or empty in inputs, using default: '{prospect_name_default}'")
+                logger.warning(f"CALLBACK: 'name' key not found or empty in inputs")
             
-            # Get email from inputs - could be 'email_address', 'email', etc.
+            # Get email from inputs
             if "email_address" in self._crew_instance_inputs and self._crew_instance_inputs["email_address"]:
                 prospect_email = self._crew_instance_inputs["email_address"]
-                logger.info(f"CALLBACK: Found email_address: '{prospect_email}'")
+                logger.info(f"CALLBACK: Found email_address in inputs: '{prospect_email}'")
             elif "email" in self._crew_instance_inputs and self._crew_instance_inputs["email"]:
                 prospect_email = self._crew_instance_inputs["email"]
-                logger.info(f"CALLBACK: Found email: '{prospect_email}'")
+                logger.info(f"CALLBACK: Found email in inputs: '{prospect_email}'")
             else:
-                logger.warning(f"CALLBACK: No valid email found in inputs, using default: '{prospect_email_default}'")
-            
-            logger.info(f"CALLBACK: Using inputs from _crew_instance_inputs: Name='{prospect_name}', Email='{prospect_email}'")
+                logger.warning(f"CALLBACK: No valid email found in inputs")
         else:
-            logger.warning(f"CALLBACK_DEBUG: self._crew_instance_inputs is FALSY or not a dict. Using defaults.")
-            logger.warning(f"CALLBACK: Warning: _crew_instance_inputs not found, empty, or not a dict. Using default name='{prospect_name_default}', email='{prospect_email_default}'.")
+            logger.warning(f"CALLBACK_DEBUG: self._crew_instance_inputs is FALSY or not a dict. Attempting to extract info from output.")
+            
+            # Second approach: Try to extract from email output
+            try:
+                # Get the actual content from output
+                email_body = None
+                if hasattr(output, 'email_body'):
+                    email_body = output.email_body
+                elif isinstance(output, dict) and 'email_body' in output:
+                    email_body = output['email_body']
+                else:
+                    # Try to parse from the string representation
+                    email_str = str(output)
+                    body_match = re.search(r"['\"]email_body['\"]:\s*['\"](.*?)['\"]", email_str, re.DOTALL)
+                    if body_match:
+                        email_body = body_match.group(1)
+                
+                if email_body:
+                    # Extract name from greeting
+                    # Find patterns like "Dear [Name]," or "Hi [Name]," or "Hello [Name],"
+                    name_match = re.search(r"(?:Dear|Hi|Hello)\s+([^,\n]+)", email_body)
+                    if name_match and name_match.group(1):
+                        extracted_name = name_match.group(1).strip()
+                        # If extracted name looks reasonable (not too long, not containing weird chars)
+                        if 2 <= len(extracted_name) <= 50 and re.match(r"^[A-Za-z\s\.\-']+$", extracted_name):
+                            prospect_name = extracted_name
+                            logger.info(f"CALLBACK: Extracted prospect name from email greeting: '{prospect_name}'")
+                    
+                    # Look for job title and company pairing if not found directly
+                    if prospect_name == prospect_name_default:
+                        title_company_match = re.search(r"(?:as|at|with|for)\s+(?:the|a|an)?\s+([A-Za-z\s\.\-']+)\s+(?:at|of|with|for)\s+([A-Za-z\s\.\-'&]+)", email_body)
+                        if title_company_match:
+                            title = title_company_match.group(1).strip()
+                            company = title_company_match.group(2).strip()
+                            if title and company:
+                                prospect_name = f"{title} at {company}"
+                                logger.info(f"CALLBACK: Created name from title/company: '{prospect_name}'")
+            except Exception as e:
+                logger.error(f"CALLBACK: Error attempting to extract name/email from output: {e}")
+                traceback.print_exc()
+        
+        logger.info(f"CALLBACK: Using final values: Name='{prospect_name}', Email='{prospect_email}'")
 
         # Directly send the email to the API
         api_call_result = send_email_to_api(
