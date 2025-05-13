@@ -260,6 +260,8 @@ spec:
       value: "3894d1511738c7ab1d79f04866bce72e.access"
     - name: CF_ACCESS_CLIENT_SECRET
       value: "d9cc6e4001d53f87f7dcdf3777e330d2781a9b866ef55ff222241b829166c510"
+    - name: AGENT_RUN_INPUTS_JSON
+      value: '$AGENT_INPUT_JSON'
   replicas: 1
 EOF
 log "YAML file created."
