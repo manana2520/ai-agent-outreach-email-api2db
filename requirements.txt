@@ -6,3 +6,4 @@ crewai-tools>=0.42.0
 python-dotenv>=1.0.0
 openai>=1.76.0
 langchain-core>=0.2.30
+requests>=2.31.0

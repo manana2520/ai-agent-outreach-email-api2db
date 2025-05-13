@@ -73,6 +73,7 @@ company = st.sidebar.text_input("Company", value=default_company)
 industry = st.sidebar.text_input("Industry", value=default_industry)
 linkedin_url = st.sidebar.text_input("LinkedIn URL", value=default_linkedin)
 our_product = st.sidebar.text_area("Our Product/Service Description", value=default_product, height=100)
+prospect_email = st.sidebar.text_input("Prospect Email", value="prospect@example.com", key="prospect_email")
 
 # --- Runner Mode and Agent Status (Semaphore) at Top of Sidebar ---
 with st.sidebar:
@@ -164,8 +165,8 @@ if generate_clicked:
     st.session_state.generated_body = None
     
     # Validate inputs 
-    if not all([name, title, company, industry, linkedin_url, our_product]):
-        st.sidebar.error("Please fill in all prospect details.")
+    if not all([name, title, company, industry, linkedin_url, our_product, prospect_email]):
+        st.sidebar.error("Please fill in all prospect details, including the Prospect Email.")
         # Reset flag if inputs are bad
         st.session_state.generate_button_clicked = False 
     else:
@@ -185,6 +186,7 @@ if generate_clicked:
             "industry": industry,
             "linkedin_url": linkedin_url,
             "our_product": our_product,
+            "email_address": prospect_email,
         }
         kickoff_payload = {
             "crew": "sales_personalized_email", # Make sure this matches crew name if needed
