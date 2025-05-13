@@ -3,6 +3,8 @@ from pydantic import BaseModel
 import requests
 from datetime import datetime, timezone
 import json
+import os
+import re
 
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
@@ -26,108 +28,83 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
     Returns:
         API response information
     """
-    print(f"send_email_to_api called with: email_data type {type(email_data)}, prospect_name: {prospect_name}, prospect_email: {prospect_email}")
+    # Get API configuration from environment variables
+    api_url = os.environ.get("EMAIL_API_URL", "https://mycomputer.maziak.eu/api/v1/import/store-emails")
+    api_token = os.environ.get("EMAIL_API_TOKEN", "33f311ec174ef02f7c7ae27cd4cc52e3")
+    cf_client_id = os.environ.get("CF_ACCESS_CLIENT_ID", "3894d1511738c7ab1d79f04866bce72e.access")
+    cf_client_secret = os.environ.get("CF_ACCESS_CLIENT_SECRET", "d9cc6e4001d53f87f7dcdf3777e330d2781a9b866ef55ff222241b829166c510")
     
-    # Handle different input formats
+    # Parse string to dict if needed
     if isinstance(email_data, str):
         try:
-            print(f"Attempting to parse email_data as JSON string: {email_data[:100]}...")
             email_data = json.loads(email_data)
-            print(f"Successfully parsed JSON. Keys: {email_data.keys() if isinstance(email_data, dict) else 'Not a dict'}")
-            
-            # If it's now a dict but not a PersonalizedEmail, convert it
-            if isinstance(email_data, dict) and not isinstance(email_data, PersonalizedEmail):
-                try:
-                    email_data = PersonalizedEmail(**email_data)
-                    print(f"Converted dict to PersonalizedEmail object")
-                except Exception as e:
-                    print(f"Error converting dict to PersonalizedEmail: {e}")
-        except json.JSONDecodeError as e:
-            print(f"JSON parsing error: {e}")
-            # Simple fallback for plain text
-            email_data = PersonalizedEmail(
-                subject_line="Email from Agent",
-                email_body=email_data,
-                follow_up_notes=""
-            )
-            print(f"Created simple PersonalizedEmail from text")
-        except Exception as e:
-            print(f"Unexpected error parsing email_data: {e}")
-            email_data = PersonalizedEmail(
-                subject_line="Email from Agent",
-                email_body=str(email_data),
-                follow_up_notes=""
-            )
-    elif isinstance(email_data, dict):
-        try:
-            email_data = PersonalizedEmail(**email_data)
-            print(f"Converted dict directly to PersonalizedEmail object")
-        except Exception as e:
-            print(f"Error converting dict to PersonalizedEmail: {e}")
-            # Try to extract useful fields from the dict
-            email_data = PersonalizedEmail(
-                subject_line=email_data.get("subject_line", "Email from Agent"),
-                email_body=email_data.get("email_body", str(email_data)),
-                follow_up_notes=email_data.get("follow_up_notes", "")
-            )
+        except:
+            # Not JSON, leave as is
+            pass
+    
+    print(f"send_email_to_api called with: email_data type {type(email_data)}, prospect_name: {prospect_name}, prospect_email: {prospect_email}")
     
     # Extract data from the email_data object
     try:
         # Check if it's a CrewOutput object from CrewAI
         if hasattr(email_data, 'items') and callable(getattr(email_data, 'items', None)):
             # CrewOutput behaves like a dictionary
-            print(f"Processing as dictionary-like object with keys: {list(email_data.keys())}")
             subject = email_data.get('subject_line', "Default Subject")
             body = email_data.get('email_body', str(email_data))
         # Handle regular objects
         elif hasattr(email_data, "subject_line"):
-            print(f"Processing as object with subject_line attribute")
             subject = email_data.subject_line
             body = email_data.email_body if hasattr(email_data, "email_body") else str(email_data)
-        # Handle string that might be JSON
-        elif isinstance(email_data, str):
-            print(f"Processing as string, attempting JSON parse")
-            try:
-                data = json.loads(email_data)
-                subject = data.get('subject_line', "Default Subject")
-                body = data.get('email_body', email_data)
-            except:
-                subject = "Default Subject"
-                body = email_data
         else:
-            print(f"Processing as unknown object type: {type(email_data)}")
-            # Try to get string representation and extract JSON-like data
-            email_data_str = str(email_data)
-            if "'subject_line':" in email_data_str and "'email_body':" in email_data_str:
+            print("Processing as unknown object type:", type(email_data))
+            # Try to see if there's subject_line and email_body in string representation
+            email_str = str(email_data)
+            if "subject_line" in email_str and "email_body" in email_str:
                 print("Found subject_line and email_body in string representation, extracting")
-                # Extract the values using regex
-                import re
-                subject_match = re.search(r"'subject_line':\s*'([^']*)'", email_data_str)
-                subject = subject_match.group(1) if subject_match else "Default Subject"
-                # Get body until next single quote followed by comma (simplified)
-                body_match = re.search(r"'email_body':\s*'([^']*)'", email_data_str)
-                body = body_match.group(1) if body_match else email_data_str
+                # Extract subject
+                subject_match = re.search(r"'subject_line':\s*'([^']*)'", email_str)
+                if subject_match:
+                    subject = subject_match.group(1)
+                else:
+                    subject = "Default Subject"
+                
+                # Extract email body (more complex as it can contain quotes and newlines)
+                body_start = email_str.find("'email_body': ")
+                if body_start != -1:
+                    # Move past the 'email_body': part
+                    body_start += len("'email_body': ")
+                    
+                    # Handle email body properly
+                    if email_str[body_start:].startswith('"'):
+                        # Double-quoted string
+                        body_end = email_str.find('",', body_start)
+                        if body_end == -1:
+                            body_end = email_str.find('"}', body_start)
+                        body = email_str[body_start+1:body_end] if body_end != -1 else email_str[body_start+1:]
+                    else:
+                        # Assume it's a single-quoted string
+                        body_end = email_str.find("',", body_start)
+                        if body_end == -1:
+                            body_end = email_str.find("'}", body_start)
+                        body = email_str[body_start+1:body_end] if body_end != -1 else email_str[body_start+1:]
+                else:
+                    body = email_str  # Just use the whole string if parsing fails
             else:
                 subject = "Default Subject"
-                body = email_data_str
+                body = email_str
             
-        print(f"Extracted subject: '{subject[:30]}...' and body (length: {len(str(body))})")
+        print(f"Extracted subject: '{subject[:30]}...' and body (length: {len(body)})")
     except Exception as e:
         print(f"Error extracting fields from email_data: {e}")
-        print(f"email_data type: {type(email_data)}")
-        try:
-            print(f"email_data stringified: {str(email_data)[:500]}...")
-        except:
-            print("Could not stringify email_data")
         subject = "Default Subject (extraction error)"
         body = str(email_data)
-            
-    api_url = "https://mycomputer.maziak.eu/api/v1/import/store-emails"
+        
+    # Prepare API call
     headers = {
-        "CF-Access-Client-Id": "3894d1511738c7ab1d79f04866bce72e.access",
-        "CF-Access-Client-Secret": "d9cc6e4001d53f87f7dcdf3777e330d2781a9b866ef55ff222241b829166c510",
+        "CF-Access-Client-Id": cf_client_id,
+        "CF-Access-Client-Secret": cf_client_secret,
         "Content-Type": "application/json",
-        "X-API-Token": "33f311ec174ef02f7c7ae27cd4cc52e3",
+        "X-API-Token": api_token,
     }
     
     payload = {

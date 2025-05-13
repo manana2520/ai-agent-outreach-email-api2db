@@ -252,6 +252,14 @@ spec:
       value: "https://openrouter.ai/api/v1"
     - name: OPENROUTER_MODEL
       value: "openai/gpt-4o-mini"
+    - name: EMAIL_API_URL
+      value: "https://mycomputer.maziak.eu/api/v1/import/store-emails"
+    - name: EMAIL_API_TOKEN
+      value: "33f311ec174ef02f7c7ae27cd4cc52e3"
+    - name: CF_ACCESS_CLIENT_ID
+      value: "3894d1511738c7ab1d79f04866bce72e.access"
+    - name: CF_ACCESS_CLIENT_SECRET
+      value: "d9cc6e4001d53f87f7dcdf3777e330d2781a9b866ef55ff222241b829166c510"
   replicas: 1
 EOF
 log "YAML file created."
