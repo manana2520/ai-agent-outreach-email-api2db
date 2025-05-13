@@ -230,26 +230,47 @@ class SalesPersonalizedEmailCrew:
 
     def store_email_callback(self, output):
         """Callback to send email to API after task completion"""
-        print(f"Executing store_email_callback")
-        print(f"Received output: {output}")
-        
-        prospect_name = "Unknown Prospect via Callback"
-        prospect_email = "unknown_callback@example.com"
-        
-        if self._crew_instance_inputs:
-            prospect_name = self._crew_instance_inputs.get("name", prospect_name)
-            prospect_email = self._crew_instance_inputs.get("email_address", prospect_email)
-            print(f"Using inputs from _crew_instance_inputs: Name='{prospect_name}', Email='{prospect_email}'")
-        else:
-            print("Warning: _crew_instance_inputs not found in callback. Using default name/email.")
+        print(f"CALLBACK: Executing store_email_callback")
+        print(f"CALLBACK: Received output (type: {type(output)}): {str(output)[:200]}...") # Print only start of output
+        print(f"CALLBACK_DEBUG: Type of self._crew_instance_inputs: {type(self._crew_instance_inputs)}")
+        print(f"CALLBACK_DEBUG: Value of self._crew_instance_inputs: {self._crew_instance_inputs}")
 
-        # Directly send the email to the API and don't rely on processing in main.py
-        # Get email inputs from the inputs hash or use defaults
-        send_email_to_api(
+        prospect_name_default = "Unknown Prospect via Callback"
+        prospect_email_default = "unknown_callback@example.com"
+        
+        prospect_name = prospect_name_default
+        prospect_email = prospect_email_default
+        
+        if self._crew_instance_inputs and isinstance(self._crew_instance_inputs, dict):
+            print(f"CALLBACK_DEBUG: self._crew_instance_inputs is a TRUTHY dictionary.")
+            retrieved_name = self._crew_instance_inputs.get("name")
+            retrieved_email = self._crew_instance_inputs.get("email_address")
+            
+            print(f"CALLBACK_DEBUG: Retrieved name from dict: {retrieved_name} (type: {type(retrieved_name)})")
+            print(f"CALLBACK_DEBUG: Retrieved email from dict: {retrieved_email} (type: {type(retrieved_email)})")
+            
+            if retrieved_name:
+                prospect_name = retrieved_name
+            else:
+                print(f"CALLBACK_DEBUG: 'name' key not found or None in _crew_instance_inputs. Using default: {prospect_name_default}")
+
+            if retrieved_email:
+                prospect_email = retrieved_email
+            else:
+                print(f"CALLBACK_DEBUG: 'email_address' key not found or None in _crew_instance_inputs. Using default: {prospect_email_default}")
+            
+            print(f"CALLBACK: Using inputs from _crew_instance_inputs: Name='{prospect_name}', Email='{prospect_email}'")
+        else:
+            print(f"CALLBACK_DEBUG: self._crew_instance_inputs is FALSY or not a dict. Using defaults.")
+            print(f"CALLBACK: Warning: _crew_instance_inputs not found, empty, or not a dict. Using default name='{prospect_name_default}', email='{prospect_email_default}'.")
+
+        # Directly send the email to the API
+        api_call_result = send_email_to_api(
             email_data=output,
             prospect_name=prospect_name,
             prospect_email=prospect_email
         )
+        print(f"CALLBACK: API call result: {api_call_result}")
         
-        # Still return the output so main.py can use it if needed
+        # Still return the output
         return output
