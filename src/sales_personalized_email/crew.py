@@ -5,10 +5,17 @@ from datetime import datetime, timezone
 import json
 import os
 import re
+import logging
 
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 
+# It's better to get the logger configured in main.py or create a specific one for crew.py
+# For simplicity, let's try to use a basic configured logger here if needed.
+# However, ideally the main module logger should be passed or imported if possible.
+logger = logging.getLogger(__name__)
+if not logger.hasHandlers():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class PersonalizedEmail(BaseModel):
     subject_line: str
@@ -42,32 +49,32 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
             # Not JSON, leave as is
             pass
     
-    print(f"send_email_to_api called with: email_data type {type(email_data)}, prospect_name: {prospect_name}, prospect_email: {prospect_email}")
+    logger.info(f"send_email_to_api called with: email_data type {type(email_data)}, prospect_name: {prospect_name}, prospect_email: {prospect_email}")
     
     # Extract data from the email_data object
     try:
         actual_email_content = None
         if hasattr(email_data, 'raw_output') and email_data.raw_output:
-            print("Processing TaskOutput/CrewOutput via raw_output")
+            logger.info("Processing TaskOutput/CrewOutput via raw_output")
             # Try to parse raw_output if it's a JSON string
             try:
                 actual_email_content = json.loads(email_data.raw_output)
             except json.JSONDecodeError:
-                print(f"raw_output is not a valid JSON string: {email_data.raw_output[:100]}...")
+                logger.warning(f"raw_output is not a valid JSON string: {email_data.raw_output[:100]}...")
                 # Fallback if raw_output is not JSON but a plain string (should not happen with Pydantic model output)
                 actual_email_content = {"subject_line": "Default Subject (raw_output non-json)", "email_body": str(email_data.raw_output)}
         elif isinstance(email_data, dict):
-            print("Processing TaskOutput/CrewOutput as dict")
+            logger.info("Processing TaskOutput/CrewOutput as dict")
             actual_email_content = email_data
         elif hasattr(email_data, 'subject_line') and hasattr(email_data, 'email_body'): # Direct Pydantic model
-             print("Processing TaskOutput/CrewOutput as Pydantic model attribute access")
+             logger.info("Processing TaskOutput/CrewOutput as Pydantic model attribute access")
              actual_email_content = {
                  "subject_line": email_data.subject_line,
                  "email_body": email_data.email_body
              }
         else:
             # Fallback for unexpected types or string representations
-            print(f"Fallback: email_data is of type {type(email_data)}. Attempting string parsing.")
+            logger.warning(f"Fallback: email_data is of type {type(email_data)}. Attempting string parsing.")
             email_str = str(email_data) 
             subject_match = re.search(r"['\"]subject_line['\"]:\s*['\"](.*?)['\"]", email_str)
             body_match = re.search(r"['\"]email_body['\"]:\s*['\"](.*?)['\"]", email_str, re.DOTALL)
@@ -78,9 +85,9 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         subject = actual_email_content.get('subject_line', "Default Subject (content parse error)")
         body = actual_email_content.get('email_body', str(actual_email_content)) # Use str as last resort
             
-        print(f"Extracted subject: '{subject[:50]}...' and body (length: {len(body)})")
+        logger.info(f"Extracted subject: '{subject[:50]}...' and body (length: {len(body)})")
     except Exception as e:
-        print(f"Error extracting fields from email_data: {e}")
+        logger.error(f"Error extracting fields from email_data: {e}")
         import traceback
         traceback.print_exc()
         subject = "Default Subject (extraction exception)"
@@ -105,15 +112,15 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
     }
     
     try:
-        print(f"Sending API request to {api_url}")
-        print(f"Payload: {json.dumps(payload, indent=2)}")
+        logger.info(f"Sending API request to {api_url}")
+        logger.info(f"Payload: {json.dumps(payload, indent=2)}")
         response = requests.post(api_url, headers=headers, json=payload, timeout=30)
-        print(f"API response status: {response.status_code}")
+        logger.info(f"API response status: {response.status_code}")
         
         try:
             response.raise_for_status()
             response_content = response.text
-            print(f"API response content: {response_content}")
+            logger.info(f"API response content: {response_content}")
             return {
                 "status_code": response.status_code,
                 "response_text": response_content,
@@ -121,7 +128,7 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
             }
         except requests.exceptions.HTTPError as e:
             error_message = f"HTTP error: {e}. Response body: {response.text}"
-            print(error_message)
+            logger.error(error_message)
             return {
                 "status_code": response.status_code,
                 "response_text": error_message,
@@ -129,7 +136,7 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
             }
     except requests.exceptions.Timeout:
         error_message = f"Request to {api_url} timed out after 30 seconds"
-        print(error_message)
+        logger.error(error_message)
         return {
             "status_code": 408,
             "response_text": error_message,
@@ -137,7 +144,7 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         }
     except requests.exceptions.ConnectionError as e:
         error_message = f"Connection error to {api_url}: {e}"
-        print(error_message)
+        logger.error(error_message)
         return {
             "status_code": 503,
             "response_text": error_message,
@@ -145,7 +152,7 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         }
     except Exception as e:
         error_message = f"Unexpected error sending to API: {str(e)}"
-        print(error_message)
+        logger.error(error_message)
         import traceback
         traceback.print_exc()
         return {
@@ -230,10 +237,10 @@ class SalesPersonalizedEmailCrew:
 
     def store_email_callback(self, output):
         """Callback to send email to API after task completion"""
-        print(f"CALLBACK: Executing store_email_callback")
-        print(f"CALLBACK: Received output (type: {type(output)}): {str(output)[:200]}...") # Print only start of output
-        print(f"CALLBACK_DEBUG: Type of self._crew_instance_inputs: {type(self._crew_instance_inputs)}")
-        print(f"CALLBACK_DEBUG: Value of self._crew_instance_inputs: {self._crew_instance_inputs}")
+        logger.info(f"CALLBACK: Executing store_email_callback")
+        logger.info(f"CALLBACK: Received output (type: {type(output)}): {str(output)[:200]}...")
+        logger.debug(f"CALLBACK_DEBUG: Type of self._crew_instance_inputs: {type(self._crew_instance_inputs)}")
+        logger.debug(f"CALLBACK_DEBUG: Value of self._crew_instance_inputs: {self._crew_instance_inputs}")
 
         prospect_name_default = "Unknown Prospect via Callback"
         prospect_email_default = "unknown_callback@example.com"
@@ -242,27 +249,27 @@ class SalesPersonalizedEmailCrew:
         prospect_email = prospect_email_default
         
         if self._crew_instance_inputs and isinstance(self._crew_instance_inputs, dict):
-            print(f"CALLBACK_DEBUG: self._crew_instance_inputs is a TRUTHY dictionary.")
+            logger.debug(f"CALLBACK_DEBUG: self._crew_instance_inputs is a TRUTHY dictionary.")
             retrieved_name = self._crew_instance_inputs.get("name")
             retrieved_email = self._crew_instance_inputs.get("email_address")
             
-            print(f"CALLBACK_DEBUG: Retrieved name from dict: {retrieved_name} (type: {type(retrieved_name)})")
-            print(f"CALLBACK_DEBUG: Retrieved email from dict: {retrieved_email} (type: {type(retrieved_email)})")
+            logger.debug(f"CALLBACK_DEBUG: Retrieved name from dict: {retrieved_name} (type: {type(retrieved_name)})")
+            logger.debug(f"CALLBACK_DEBUG: Retrieved email from dict: {retrieved_email} (type: {type(retrieved_email)})")
             
             if retrieved_name:
                 prospect_name = retrieved_name
             else:
-                print(f"CALLBACK_DEBUG: 'name' key not found or None in _crew_instance_inputs. Using default: {prospect_name_default}")
+                logger.warning(f"CALLBACK_DEBUG: 'name' key not found or None in _crew_instance_inputs. Using default: {prospect_name_default}")
 
             if retrieved_email:
                 prospect_email = retrieved_email
             else:
-                print(f"CALLBACK_DEBUG: 'email_address' key not found or None in _crew_instance_inputs. Using default: {prospect_email_default}")
+                logger.warning(f"CALLBACK_DEBUG: 'email_address' key not found or None in _crew_instance_inputs. Using default: {prospect_email_default}")
             
-            print(f"CALLBACK: Using inputs from _crew_instance_inputs: Name='{prospect_name}', Email='{prospect_email}'")
+            logger.info(f"CALLBACK: Using inputs from _crew_instance_inputs: Name='{prospect_name}', Email='{prospect_email}'")
         else:
-            print(f"CALLBACK_DEBUG: self._crew_instance_inputs is FALSY or not a dict. Using defaults.")
-            print(f"CALLBACK: Warning: _crew_instance_inputs not found, empty, or not a dict. Using default name='{prospect_name_default}', email='{prospect_email_default}'.")
+            logger.warning(f"CALLBACK_DEBUG: self._crew_instance_inputs is FALSY or not a dict. Using defaults.")
+            logger.warning(f"CALLBACK: Warning: _crew_instance_inputs not found, empty, or not a dict. Using default name='{prospect_name_default}', email='{prospect_email_default}'.")
 
         # Directly send the email to the API
         api_call_result = send_email_to_api(
@@ -270,7 +277,7 @@ class SalesPersonalizedEmailCrew:
             prospect_name=prospect_name,
             prospect_email=prospect_email
         )
-        print(f"CALLBACK: API call result: {api_call_result}")
+        logger.info(f"CALLBACK: API call result: {api_call_result}")
         
         # Still return the output
         return output
