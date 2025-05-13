@@ -132,6 +132,9 @@ def run(inputs_override: Optional[dict] = None):
             }
         }
 
+        print(f"Attempting to send the following payload to {api_url}:")
+        print(json.dumps(payload, indent=2))
+
         try:
             response = requests.post(api_url, headers=headers, json=payload)
             response.raise_for_status()
