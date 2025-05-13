@@ -128,7 +128,7 @@ def run(inputs_override: Optional[dict] = None):
                 "email": inputs.get("email_address"),
                 "subject": email_subject,
                 "message": email_body,
-                "date": datetime.now(timezone.utc).isoformat(),
+                "date": datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
             }
         }
 
