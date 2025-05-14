@@ -95,6 +95,11 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         body = actual_email_content.get('email_body', str(actual_email_content)) # Use str as last resort
             
         logger.info(f"Extracted subject: '{subject[:50]}...' and body (length: {len(body)})")
+        
+        # Add detailed debugging for the subject
+        logger.info(f"SUBJECT DEBUG - Full subject: '{subject}'")
+        logger.info(f"SUBJECT DEBUG - Subject length: {len(subject)}")
+        logger.info(f"SUBJECT DEBUG - First 20 chars: '{subject[:20]}'")
     except Exception as e:
         logger.error(f"Error extracting fields from email_data: {e}")
         traceback.print_exc()
@@ -122,6 +127,12 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
     try:
         logger.info(f"Sending API request to {api_url}")
         logger.info(f"Payload: {json.dumps(payload, indent=2)}")
+        
+        # Debug the actual payload subject that will be sent
+        logger.info(f"PAYLOAD DEBUG - Subject in payload: '{payload['data']['subject']}'")
+        logger.info(f"PAYLOAD DEBUG - Subject length in payload: {len(payload['data']['subject'])}")
+        logger.info(f"PAYLOAD DEBUG - Message length in payload: {len(payload['data']['message'])}")
+        
         response = requests.post(api_url, headers=headers, json=payload, timeout=30)
         logger.info(f"API response status: {response.status_code}")
         
