@@ -105,7 +105,7 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         logger.info(f"BODY DEBUG - First 50 chars: '{body[:50]}'")
         logger.info(f"BODY DEBUG - Last 50 chars: '{body[-50:] if len(body) > 50 else body}'")
         logger.info(f"BODY DEBUG - Body total length: {len(body)}")
-        logger.info(f"BODY DEBUG - Body contains newlines: {'\\n' in body}")
+        logger.info("BODY DEBUG - Body contains newlines: {'\\n' in body}".replace("'\\n'", repr("\n")))
         logger.info(f"BODY DEBUG - Body content type: {type(body)}")
     except Exception as e:
         logger.error(f"Error extracting fields from email_data: {e}")
