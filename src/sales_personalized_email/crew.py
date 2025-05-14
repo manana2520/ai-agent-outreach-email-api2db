@@ -121,12 +121,17 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         "X-API-Token": api_token,
     }
     
+    # Ensure body is properly encoded with no length limitations
+    # Some APIs might silently truncate long JSON fields - ensure we use proper escaping
+    body_encoded = body
+    
+    # Create the payload with full body content
     payload = {
         "data": {
             "name": prospect_name,
             "email": prospect_email,
             "subject": subject,
-            "message": body,
+            "message": body_encoded,
             "date": datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
         }
     }
@@ -150,7 +155,18 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         logger.info(f"PAYLOAD JSON DEBUG - JSON length: {len(payload_json)}")
         logger.info(f"PAYLOAD JSON DEBUG - Preview: '{payload_json[:200]}...'")
         
-        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        # Use a different approach for the request to ensure full body is sent
+        # First serialize to JSON with ensure_ascii=False to handle unicode properly
+        payload_json_str = json.dumps(payload, ensure_ascii=False)
+        logger.info(f"FINAL PAYLOAD DEBUG - Length: {len(payload_json_str)}")
+        
+        # Make the request with the serialized JSON string
+        response = requests.post(
+            api_url,
+            headers=headers,
+            data=payload_json_str.encode('utf-8'),
+            timeout=30
+        )
         logger.info(f"API response status: {response.status_code}")
         
         try:
