@@ -100,6 +100,13 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         logger.info(f"SUBJECT DEBUG - Full subject: '{subject}'")
         logger.info(f"SUBJECT DEBUG - Subject length: {len(subject)}")
         logger.info(f"SUBJECT DEBUG - First 20 chars: '{subject[:20]}'")
+        
+        # Add detailed debugging for the email body
+        logger.info(f"BODY DEBUG - First 50 chars: '{body[:50]}'")
+        logger.info(f"BODY DEBUG - Last 50 chars: '{body[-50:] if len(body) > 50 else body}'")
+        logger.info(f"BODY DEBUG - Body total length: {len(body)}")
+        logger.info(f"BODY DEBUG - Body contains newlines: {'\\n' in body}")
+        logger.info(f"BODY DEBUG - Body content type: {type(body)}")
     except Exception as e:
         logger.error(f"Error extracting fields from email_data: {e}")
         traceback.print_exc()
@@ -132,6 +139,16 @@ def send_email_to_api(email_data, prospect_name, prospect_email):
         logger.info(f"PAYLOAD DEBUG - Subject in payload: '{payload['data']['subject']}'")
         logger.info(f"PAYLOAD DEBUG - Subject length in payload: {len(payload['data']['subject'])}")
         logger.info(f"PAYLOAD DEBUG - Message length in payload: {len(payload['data']['message'])}")
+        
+        # Add detailed debugging for the full message in payload
+        message_sample = payload['data']['message']
+        logger.info(f"PAYLOAD BODY DEBUG - First 100 chars: '{message_sample[:100]}'")
+        logger.info(f"PAYLOAD BODY DEBUG - Last 100 chars: '{message_sample[-100:] if len(message_sample) > 100 else message_sample}'")
+        
+        # Create a separate debug log with the serialized JSON
+        payload_json = json.dumps(payload)
+        logger.info(f"PAYLOAD JSON DEBUG - JSON length: {len(payload_json)}")
+        logger.info(f"PAYLOAD JSON DEBUG - Preview: '{payload_json[:200]}...'")
         
         response = requests.post(api_url, headers=headers, json=payload, timeout=30)
         logger.info(f"API response status: {response.status_code}")
